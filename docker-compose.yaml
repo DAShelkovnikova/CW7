@@ -1,0 +1,59 @@
+version: '3'
+
+services:
+  redis:
+    image: redis
+    ports:
+      - '6379:6379'
+
+
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "POSTGRES_DB"
+      POSTGRES_USER: "POSTGRES_USER"
+      POSTGRES_PASSWORD: "POSTGRES_PASSWORD"
+      POSTGRES_HOST: "POSTGRES_HOST"
+      POSTGRES_PORT: "POSTGRES_PORT"
+    restart: on-failure
+    env_file:
+      - .env
+    expose:
+      - "5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "-c", "pg_isready -U $POSTGRES_USER"]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+
+  app:
+    build: CW7
+    tty: true
+    command: python manage.py migrate && python manage.py runserver 0.0.0.8000
+    ports:
+      - '8001:8000'
+    volumes:
+      - .:/code
+    depends_on:
+      db:
+        condition: service_healthy
+
+  celery:
+    build: CW7
+    tty: true
+    command: celery -A CW7 worker -l info
+    depends_on:
+      - redis
+      - app
+
+  celery_beat:
+    build: CW7
+    tty: true
+    command: celery -A CW7 beat -l info -S django
+    depends_on:
+      - redis
+      - app
+
+volumes:
+  pg_data:
